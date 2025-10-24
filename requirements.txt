@@ -1,0 +1,4 @@
+pywin32
+mss
+pillow
+opencv-python
