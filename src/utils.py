@@ -29,7 +29,7 @@ def get_client_rect(hwnd: HWND) -> Optional[CLIENT_RECT]:
 
     # Optional but good check for minimized or cloaked windows (e.g., UWP apps)
     # GetWindowLong returns the style, then check the minimize bit
-    if win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE) & win32con.WS_MINIMIZE:
+    if win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE) & win32con.WS_MINIMIZE: # type: ignore
         return None
 
     # 2. Get the client area rectangle in *window-relative* coordinates (0, 0, width, height)
