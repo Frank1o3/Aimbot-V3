@@ -76,7 +76,7 @@ class General:
     """ General settings """
     target_win: str = ""
     fov: int = 150
-    color: ColorHex = ColorHex(0xe600e6)
+    color: ColorHex = ColorHex(0xfa0000)
     trigger_bot: bool = False
 
 
