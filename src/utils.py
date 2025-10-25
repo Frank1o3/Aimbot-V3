@@ -3,11 +3,10 @@ import win32con
 from typing import Tuple, Optional
 
 # Constants for better readability
-HWND = int
 RECT = Tuple[int, int, int, int] # (left, top, right, bottom)
 CLIENT_RECT = Tuple[int, int, int, int] # (x, y, width, height)
 
-def get_window_hwnd(window_title: str) -> Optional[HWND]:
+def get_window_hwnd(window_title: str) -> Optional[int]:
     """Get the handle of the window with the specified title."""
     # FindWindow returns 0 if no window is found
     hwnd = win32gui.FindWindow(None, window_title)
@@ -15,7 +14,7 @@ def get_window_hwnd(window_title: str) -> Optional[HWND]:
         return None
     return hwnd
 
-def get_client_rect(hwnd: HWND) -> Optional[CLIENT_RECT]:
+def get_client_rect(hwnd: int) -> Optional[CLIENT_RECT]:
     """
     Gets the size and position of the window's client area (inner content) 
     in screen coordinates (x, y, width, height).
