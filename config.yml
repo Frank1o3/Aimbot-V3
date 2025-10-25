@@ -1,18 +1,17 @@
 general:
   target_win: "Roblox"
   fov: 200
-  color: 0xe600e6
+  color: 0xfa0000
   trigger_bot: false
 
 aimbot:
   enabled: true
-  tolerance: 5.0
+  tolerance: 15.5
   lead_factor: 0.35
 
 offset:
   x: 0.0
-  y: 0.0
-  min_area: 15
+  y: -3.5
 
 sensitivity:
   smoothness: 0.5
