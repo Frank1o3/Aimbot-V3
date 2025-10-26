@@ -1,6 +1,6 @@
 general:
   target_win: "Roblox"
-  fov: 250
+  fov: 150
   color: 0x0000fa
   trigger_bot: false
 

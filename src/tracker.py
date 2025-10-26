@@ -62,7 +62,7 @@ class Tracker:
             x, y, width, height = client_rect
             center_x = x + width // 2
             center_y = y + height // 2
-            fov_half = self.config.general.fov//2 // 2
+            fov_half = self.config.general.fov//2
 
             self.monitor = {
                 "top": max(y, center_y - fov_half),
@@ -78,6 +78,15 @@ class Tracker:
             img = np.array(screenshot)
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
             self.frame = np.ascontiguousarray(img)
+
+    def contour_distance_sq(self, center_x: int, center_y: int, cnt: "cv.typing.MatLike") -> float:
+        """Return squared distance from contour centroid to (center_x, center_y)."""
+        M = cv.moments(cnt)
+        if M["m00"] == 0:
+            return float("inf")  # Skip empty contours
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        return (cx - center_x) ** 2 + (cy - center_y) ** 2
 
     def detect_thread(self) -> None:
         """Continuously detects the target color in the captured frames."""
@@ -96,18 +105,14 @@ class Tracker:
                 center_x, center_y = frame_w // 2, frame_h // 2
 
                 # Select contour closest to the frame center
-                def contour_distance_sq(cnt):
-                    M = cv.moments(cnt)
-                    if M["m00"] == 0 or M["m10"] == 0 or M["m01"] == 0:
-                        return float("inf")  # Skip empty contours
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    return (cx - center_x)**2 + (cy - center_y)**2
-
-                closest_contour = min(contours, key=contour_distance_sq)
+                # fix: pass center coords to the key function via a lambda
+                closest_contour = min(
+                    contours, key=lambda cnt: self.contour_distance_sq(
+                        center_x, center_y, cnt)
+                )
                 M = cv.moments(closest_contour)
 
-                if M["m00"] == 0 or M["m10"] == 0 or M["m01"] == 0:
+                if M["m00"] == 0:
                     continue
 
                 cX_frame = int(M["m10"] / M["m00"])
