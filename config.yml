@@ -14,6 +14,6 @@ offset:
   y: 0.0
 
 sensitivity:
-  smoothness: 0.5
+  smoothness: 0.75
   min_sensitivity: 5.0
   max_sensitivity: 15

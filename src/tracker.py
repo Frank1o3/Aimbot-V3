@@ -133,6 +133,8 @@ class Tracker:
                                cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                     cv.imshow("Target Tracking", debug_frame)
                     cv.waitKey(1)
+                else:
+                    sleep(0.01)
 
                 dX = cX - self.PrevX
                 dY = cY - self.PrevY
