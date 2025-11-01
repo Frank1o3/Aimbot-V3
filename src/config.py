@@ -37,8 +37,6 @@ class ColorHex:
             raise ValueError(
                 "Hex integer must be between 0x000000 and 0xFFFFFF.")
 
-        print(f"Initialized ColorHex with internal value: 0x{self._value:06x}")
-
     # --- Properties for Component Extraction ---
 
     @property
@@ -77,7 +75,7 @@ class General:
     target_win: str = ""
     fov: int = 150
     color: ColorHex = ColorHex(0xfa0000)
-    trigger_bot: bool = False
+    debug_mode: bool = False
 
 
 class Aimbot:
@@ -85,6 +83,8 @@ class Aimbot:
     enabled: bool = False
     tolerance: float = 5.0
     lead_factor: float = 0.35
+    min_area: int = 50
+    max_area: int = 150
 
 
 class Offset:

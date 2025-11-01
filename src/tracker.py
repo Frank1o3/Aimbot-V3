@@ -45,7 +45,7 @@ class Tracker:
         self.VelY = 0.0
         self.exit = Event()
         self.exit.set()
-        self.debug_mode = False  # Toggle with F3
+        self.config.general.debug_mode = False  # Toggle with F3
 
     # Implement the screenshot thread
     def capture_thread(self) -> None:
@@ -79,14 +79,18 @@ class Tracker:
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
             self.frame = np.ascontiguousarray(img)
 
-    def contour_distance_sq(self, center_x: int, center_y: int, cnt: "cv.typing.MatLike") -> float:
-        """Return squared distance from contour centroid to (center_x, center_y)."""
+    def contour_score(self, center_x:int, center_y:int, cnt:cv.typing.MatLike):
+        area = cv.contourArea(cnt)
+        if not (self.config.aimbot.min_area < area < self.config.aimbot.max_area):
+            return float("inf")
         M = cv.moments(cnt)
         if M["m00"] == 0:
-            return float("inf")  # Skip empty contours
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        return (cx - center_x) ** 2 + (cy - center_y) ** 2
+            return float("inf")
+        cx = M["m10"] / M["m00"]
+        cy = M["m01"] / M["m00"]
+        dist_sq = (cx - center_x)**2 + (cy - center_y)**2
+        return dist_sq / (area + 1)  # prioritize larger targets if desired
+
 
     def detect_thread(self) -> None:
         """Continuously detects the target color in the captured frames."""
@@ -107,7 +111,7 @@ class Tracker:
                 # Select contour closest to the frame center
                 # fix: pass center coords to the key function via a lambda
                 closest_contour = min(
-                    contours, key=lambda cnt: self.contour_distance_sq(
+                    contours, key=lambda cnt: self.contour_score(
                         center_x, center_y, cnt)
                 )
                 M = cv.moments(closest_contour)
@@ -122,7 +126,7 @@ class Tracker:
                 cX = cX_frame + self.monitor["left"]
                 cY = cY_frame + self.monitor["top"]
 
-                if self.debug_mode:
+                if self.config.general.debug_mode:
                     debug_frame = frame.copy()
                     cv.drawContours(
                         debug_frame, [closest_contour], -1, (0, 255, 0), 2)
@@ -168,7 +172,7 @@ class Tracker:
         print(
             f"[STARTUP] Target color: RGB{self.color} (tolerance: {self.config.aimbot.tolerance})")
         print(
-            f"[STARTUP] Press F1 to exit, F2 to toggle aimbot, F3 to toggle debug view\n")
+            f"[STARTUP] Press F1 to exit, Right Click to enable the aimbot, F233 to toggle debug view\n")
 
         thread1 = Thread(target=self.capture_thread)
         thread2 = Thread(target=self.detect_thread)
@@ -182,18 +186,14 @@ class Tracker:
                 self.exit.clear()
                 break
             if GetAsyncKeyState(VK_F2):
-                self.config.aimbot.enabled = not (self.config.aimbot.enabled)
-                print(
-                    f"[TOGGLE] Aimbot {'ENABLED' if self.config.aimbot.enabled else 'DISABLED'}")
-                sleep(0.2)  # Debounce to prevent multiple toggles
+                self.config.aimbot.enabled = not self.config.aimbot.enabled
             if GetAsyncKeyState(VK_F3):
-                self.debug_mode = not self.debug_mode
+                self.config.general.debug_mode = not self.config.general.debug_mode
                 print(
-                    f"[DEBUG] Debug view {'ENABLED' if self.debug_mode else 'DISABLED'}")
-                if not self.debug_mode:
-                    cv.destroyAllWindows()
+                    f"[DEBUG] Debug view {'ENABLED' if self.config.general.debug_mode else 'DISABLED'}")
+                cv.destroyAllWindows()
                 sleep(0.2)  # Debounce to prevent multiple toggles
-            sleep(0.15)
+            sleep(0.01)
 
         cv.destroyAllWindows()  # Clean up windows on exit
         thread1.join()
