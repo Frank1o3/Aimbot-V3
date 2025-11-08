@@ -1,52 +1,70 @@
-""" Config loader using Pydantic """
+""" Config loader using Pydantic v2 with ColorHex as RootModel """
 
-from typing import Tuple, Union
+from typing import Tuple, Any
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, RootModel, field_validator
 
 
-class ColorHex(BaseModel):
-    """A Pydantic-compatible color type (always stores int internally)."""
-    value: int
+class ColorHex(RootModel[int]):
+    """
+    A Pydantic RootModel that stores a 24-bit color as an int.
+    Accepts int (e.g. 0xe400e4 or 14942436) or hex string ("#e400e4" or "e400e4").
+    """
 
-    @field_validator("value", mode="before")
+    @field_validator("root", mode="before")
     @classmethod
-    def parse_hex(cls, v: Union[int, str]) -> int:
-        if isinstance(v, str):
-            v = v.lstrip("#").lower()
-            if len(v) != 6:
+    def _parse_root(cls, v: Any):
+        # Accept already-int values
+        if isinstance(v, int):
+            val = v
+        elif isinstance(v, str):
+            s = v.lstrip("#").lower()
+            if len(s) != 6:
                 raise ValueError("Hex string must be 6 characters (RRGGBB).")
-            v = int(v, 16)
-        if not 0 <= v <= 0xFFFFFF:
+            try:
+                val = int(s, 16)
+            except ValueError as exc:
+                raise ValueError("Invalid hex color string.") from exc
+        else:
+            raise TypeError("Color must be an int or hex string.")
+        if not 0 <= val <= 0xFFFFFF:
             raise ValueError(
                 "Hex value must be between 0x000000 and 0xFFFFFF.")
-        return v
+        return val
+
+    # convenience property
+    @property
+    def value(self) -> int:
+        return self.root
 
     @property
     def r(self) -> int:
-        return (self.value >> 16) & 0xFF
+        return (self.root >> 16) & 0xFF
 
     @property
     def g(self) -> int:
-        return (self.value >> 8) & 0xFF
+        return (self.root >> 8) & 0xFF
 
     @property
     def b(self) -> int:
-        return self.value & 0xFF
+        return self.root & 0xFF
 
     @property
     def rgb(self) -> Tuple[int, int, int]:
         return (self.r, self.g, self.b)
 
     def __str__(self) -> str:
-        return f"#{self.value:06x}"
+        return f"#{self.root:06x}"
+
+    def __repr__(self) -> str:
+        return f"ColorHex(0x{self.root:06x})"
 
 
 class General(BaseModel):
     target_win: str = ""
     fov: int = 150
-    color: ColorHex = ColorHex(value=0xfa0000)
+    color: ColorHex = ColorHex(0xfa0000)
     debug_mode: bool = False
 
 
