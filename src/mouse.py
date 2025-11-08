@@ -1,7 +1,8 @@
 """Module for mouse control functions on Windows."""
 
-from win32api import GetCursorPos, mouse_event # type: ignore
+from win32api import GetCursorPos, mouse_event  # type: ignore
 from win32con import MOUSEEVENTF_MOVE
+
 
 def move_mouse_relative(dx: int, dy: int) -> None:
     """Move the mouse cursor by the specified relative amounts."""

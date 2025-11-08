@@ -1,6 +1,7 @@
-import win32gui
+from typing import Optional, Tuple
+
 import win32con
-from typing import Tuple, Optional
+import win32gui
 
 # Constants for better readability
 RECT = Tuple[int, int, int, int] # (left, top, right, bottom)

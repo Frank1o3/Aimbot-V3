@@ -2,3 +2,7 @@ mss
 pillow
 opencv-python
 pyyaml
+pywin32
+openvino>=2025.3.0
+mypy
+pylint

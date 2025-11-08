@@ -1,6 +1,7 @@
 """ Config loader """
 
-from typing import Union, Tuple, get_type_hints, Any
+from typing import Any, Tuple, Union, get_type_hints
+
 import yaml
 
 
@@ -85,6 +86,7 @@ class Aimbot:
     lead_factor: float = 0.35
     min_area: int = 50
     max_area: int = 150
+    conf_thresh: float = 0.45           # YOLO confidence
 
 
 class Offset:
@@ -118,26 +120,28 @@ class Config:
 
         for section_name, section_data in data.items():
             section_instance = getattr(config, section_name, None)
-            if section_instance:
-                section_class: type[Any] = type(section_instance)
-                hints = get_type_hints(section_class)
+            if section_instance is None:
+                print(f"Warning: Unknown section '{section_name}' in config.")
+                continue
 
-                for key, value in section_data.items():
-                    if hasattr(section_instance, key):
-                        expected_type = hints.get(key)
+            # Explicitly declare the type
+            section_class: type[Any] = type(section_instance)
 
-                        if expected_type is ColorHex:
-                            try:
-                                value = ColorHex(value)
-                            except (TypeError, ValueError) as e:
-                                print(
-                                    f"Error converting '{key}' to ColorHex: {e}")
-                                continue
+            # Retrieve proper type hints for the section class
+            hints: dict[str, Any] = get_type_hints(section_class)
 
-                        setattr(section_instance, key, value)
-                    else:
-                        print(
-                            f"Warning: Key '{key}' not found in '{section_name}'.")
+            for key, value in section_data.items():
+                if not hasattr(section_instance, key):
+                    print(f"Warning: Key '{key}' not found in '{section_name}'.")
+                    continue
 
-        print("\nConfiguration Loaded Successfully!")
+                expected_type = hints.get(key)
+                if expected_type is ColorHex:
+                    try:
+                        value = ColorHex(value)
+                    except (TypeError, ValueError) as e:
+                        print(f"Error converting '{key}' to ColorHex: {e}")
+                        continue
+
+                setattr(section_instance, key, value)
         return config

@@ -2,7 +2,7 @@
 
 # Build in Modules
 import math
-from threading import Thread, Event
+from threading import Event, Thread
 from time import sleep
 
 # Third Party Modules
@@ -13,9 +13,9 @@ from win32api import GetAsyncKeyState
 from win32con import VK_F1, VK_F2, VK_F3
 
 # Custom Made Modules
-from utils import get_window_hwnd, get_client_rect
-from mouse import get_mouse_position, move_mouse_relative
 from config import Config
+from mouse import get_mouse_position, move_mouse_relative
+from utils import get_client_rect, get_window_hwnd
 
 
 class Tracker:
@@ -35,7 +35,7 @@ class Tracker:
         self.upper_bound = np.clip(
             self.color + config.aimbot.tolerance, 0, 255)
 
-        self.frame = np.ascontiguousarray(np.zeros((1, 1, 3), dtype=np.uint8))
+        self.frame: cv.typing.MatLike = np.zeros((1, 1), dtype=np.uint8)
 
         # pre set the client_rect
         self.monitor = {"top": 0, "left": 0, "bottom": 0, "right": 0}
@@ -45,7 +45,8 @@ class Tracker:
         self.VelY = 0.0
         self.exit = Event()
         self.exit.set()
-        self.config.general.debug_mode = False  # Toggle with F3
+        self.fov = max(self.config.general.fov,320)
+        self.fov_half = self.fov //2
 
     # Implement the screenshot thread
     def capture_thread(self) -> None:
@@ -62,22 +63,22 @@ class Tracker:
             x, y, width, height = client_rect
             center_x = x + width // 2
             center_y = y + height // 2
-            fov_half = self.config.general.fov//2
 
             self.monitor = {
-                "top": max(y, center_y - fov_half),
-                "left": max(x, center_x - fov_half),
-                "width": min(x + width, center_x + fov_half)
-                - max(x, center_x - fov_half),
-                "height": min(y + height, center_y + fov_half)
-                - max(y, center_y - fov_half),
+                "top": max(y, center_y - self.fov_half),
+                "left": max(x, center_x - self.fov_half),
+                "width": min(x + width, center_x + self.fov_half)
+                - max(x, center_x - self.fov_half),
+                "height": min(y + height, center_y + self.fov_half)
+                - max(y, center_y - self.fov_half),
             }
 
             screenshot = sct.grab(self.monitor)
 
             img = np.array(screenshot)
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
-            self.frame = np.ascontiguousarray(img)
+            frame = np.ascontiguousarray(img)
+            self.frame = cv.inRange(frame, self.lower_bound, self.upper_bound).astype(np.uint8)
 
     def contour_score(self, center_x:int, center_y:int, cnt:cv.typing.MatLike):
         area = cv.contourArea(cnt)
@@ -99,10 +100,9 @@ class Tracker:
             frame = self.frame.copy()
             if frame.size == 0:
                 continue
-
-            mask = cv.inRange(frame, self.lower_bound, self.upper_bound)
+            
             contours, _ = cv.findContours(
-                mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+                frame, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
             if contours and self.monitor and self.config.aimbot.enabled:
                 frame_h, frame_w = frame.shape[:2]
@@ -127,15 +127,14 @@ class Tracker:
                 cY = cY_frame + self.monitor["top"]
 
                 if self.config.general.debug_mode:
-                    debug_frame = frame.copy()
                     cv.drawContours(
-                        debug_frame, [closest_contour], -1, (0, 255, 0), 2)
-                    cv.circle(debug_frame, (cX_frame, cY_frame),
+                        frame, [closest_contour], -1, (0, 255, 0), 2)
+                    cv.circle(frame, (cX_frame, cY_frame),
                               5, (0, 0, 255), -1)
-                    cv.putText(debug_frame, f"Target: ({cX_frame},{cY_frame})",
+                    cv.putText(frame, f"Target: ({cX_frame},{cY_frame})",
                                (cX_frame + 10, cY_frame - 10),
                                cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                    cv.imshow("Target Tracking", debug_frame)
+                    cv.imshow("Target Tracking", frame)
                     cv.waitKey(1)
                 else:
                     sleep(0.01)
@@ -151,7 +150,7 @@ class Tracker:
                 PredY = cY + self.config.offset.y + self.VelY * self.config.aimbot.lead_factor
 
                 dist = math.hypot(PredX - mouse_X, PredY - mouse_Y)
-                sens = self.config.sensitivity.min_sensitivity + (dist / self.config.general.fov) * (
+                sens = self.config.sensitivity.min_sensitivity + (dist / self.fov) * (
                     self.config.sensitivity.max_sensitivity - self.config.sensitivity.min_sensitivity)
                 sens = max(self.config.sensitivity.min_sensitivity,
                            min(sens, self.config.sensitivity.max_sensitivity))
@@ -172,7 +171,7 @@ class Tracker:
         print(
             f"[STARTUP] Target color: RGB{self.color} (tolerance: {self.config.aimbot.tolerance})")
         print(
-            f"[STARTUP] Press F1 to exit, Right Click to enable the aimbot, F233 to toggle debug view\n")
+            f"[STARTUP] Press F1 to exit, Right Click to enable the aimbot, F2 to toggle debug view\n")
 
         thread1 = Thread(target=self.capture_thread)
         thread2 = Thread(target=self.detect_thread)

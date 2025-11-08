@@ -1,6 +1,7 @@
 """ Main entry point for the application. """
 
 import os
+
 from config import Config
 from tracker import Tracker
 
