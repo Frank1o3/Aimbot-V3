@@ -45,8 +45,8 @@ class Tracker:
         self.VelY = 0.0
         self.exit = Event()
         self.exit.set()
-        self.fov = max(self.config.general.fov,320)
-        self.fov_half = self.fov //2
+        self.fov = max(self.config.general.fov, 320)
+        self.fov_half = self.fov // 2
 
     # Implement the screenshot thread
     def capture_thread(self) -> None:
@@ -78,9 +78,10 @@ class Tracker:
             img = np.array(screenshot)
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
             frame = np.ascontiguousarray(img)
-            self.frame = cv.inRange(frame, self.lower_bound, self.upper_bound).astype(np.uint8)
+            self.frame = cv.inRange(
+                frame, self.lower_bound, self.upper_bound).astype(np.uint8)
 
-    def contour_score(self, center_x:int, center_y:int, cnt:cv.typing.MatLike):
+    def contour_score(self, center_x: int, center_y: int, cnt: cv.typing.MatLike):
         area = cv.contourArea(cnt)
         if not (self.config.aimbot.min_area < area < self.config.aimbot.max_area):
             return float("inf")
@@ -92,7 +93,6 @@ class Tracker:
         dist_sq = (cx - center_x)**2 + (cy - center_y)**2
         return dist_sq / (area + 1)  # prioritize larger targets if desired
 
-
     def detect_thread(self) -> None:
         """Continuously detects the target color in the captured frames."""
         while self.exit.is_set():
@@ -100,7 +100,7 @@ class Tracker:
             frame = self.frame.copy()
             if frame.size == 0:
                 continue
-            
+
             contours, _ = cv.findContours(
                 frame, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
