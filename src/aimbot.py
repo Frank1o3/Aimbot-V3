@@ -174,7 +174,7 @@ class Tracker:
         print(
             f"[STARTUP] Target color: RGB{self.color} (tolerance: {self.config.aimbot.tolerance})")
         print(
-            f"[STARTUP] Press F1 to exit, Right Click to enable the aimbot, F2 to toggle debug view\n")
+            f"[STARTUP] Press F1 to exit, F2 to enable the aimbot, F3 to toggle debug view, F4 To set Alternate move\n")
 
         thread1 = Thread(target=self.capture_thread)
         thread2 = Thread(target=self.detect_thread)
@@ -189,13 +189,15 @@ class Tracker:
                 break
             elif GetAsyncKeyState(VK_F2):
                 self.config.aimbot.enabled = not self.config.aimbot.enabled
+                print(f"[DEBUG] Aimbot: {'ENABLED' if self.alternate_move else 'DISABLED'}")
             elif GetAsyncKeyState(VK_F3):
                 self.config.general.debug_mode = not self.config.general.debug_mode
                 print(
-                    f"[DEBUG] Debug view {'ENABLED' if self.config.general.debug_mode else 'DISABLED'}")
+                    f"[DEBUG] Debug view: {'ENABLED' if self.config.general.debug_mode else 'DISABLED'}")
                 cv.destroyAllWindows()
             elif GetAsyncKeyState(VK_F4):
                 self.alternate_move = not self.alternate_move
+                print(f"[DEBUG] Alternate move: {'ENABLED' if self.alternate_move else 'DISABLED'}")
             sleep(0.01)
 
         cv.destroyAllWindows()  # Clean up windows on exit
