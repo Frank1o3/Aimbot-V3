@@ -10,11 +10,11 @@ import cv2 as cv
 import numpy as np
 from mss import mss
 from win32api import GetAsyncKeyState
-from win32con import VK_F1, VK_F2, VK_F3
+from win32con import VK_F1, VK_F2, VK_F3, VK_F4
 
 # Custom Made Modules
 from config import Config
-from mouse import get_mouse_position, move_mouse_relative
+from mouse import get_mouse_position, move_mouse_relative, move_mouse_to
 from utils import get_client_rect, get_window_hwnd
 
 
@@ -23,6 +23,7 @@ class Tracker:
 
     def __init__(self, config: Config) -> None:
         self.config = config
+        self.alternate_move = False
         self.color = np.array(config.general.color.rgb, dtype=np.uint8)
         self.hwnd = get_window_hwnd(config.general.target_win)
         if self.hwnd is None:
@@ -148,19 +149,21 @@ class Tracker:
 
                 PredX = cX + self.config.offset.x + self.VelX * self.config.aimbot.lead_factor
                 PredY = cY + self.config.offset.y + self.VelY * self.config.aimbot.lead_factor
+                if not self.alternate_move:
+                    dist = math.hypot(PredX - mouse_X, PredY - mouse_Y)
+                    sens = self.config.sensitivity.min_sensitivity + (dist / self.fov) * (
+                        self.config.sensitivity.max_sensitivity - self.config.sensitivity.min_sensitivity)
+                    sens = max(self.config.sensitivity.min_sensitivity,
+                            min(sens, self.config.sensitivity.max_sensitivity))
 
-                dist = math.hypot(PredX - mouse_X, PredY - mouse_Y)
-                sens = self.config.sensitivity.min_sensitivity + (dist / self.fov) * (
-                    self.config.sensitivity.max_sensitivity - self.config.sensitivity.min_sensitivity)
-                sens = max(self.config.sensitivity.min_sensitivity,
-                           min(sens, self.config.sensitivity.max_sensitivity))
+                    moveX = math.ceil((PredX - mouse_X) / sens)
+                    moveY = math.ceil((PredY - mouse_Y) / sens)
 
-                moveX = math.ceil((PredX - mouse_X) / sens)
-                moveY = math.ceil((PredY - mouse_Y) / sens)
-
-                move_mouse_relative(moveX, moveY)
-                self.PrevX = cX
-                self.PrevY = cY
+                    move_mouse_relative(moveX, moveY)
+                    self.PrevX = cX
+                    self.PrevY = cY
+                else:
+                    move_mouse_to(math.ceil(PredX), math.ceil(PredY))
             else:
                 self.PrevX = 0
                 self.PrevY = 0
@@ -184,14 +187,15 @@ class Tracker:
                 print("\n[EXIT] F1 pressed, shutting down...")
                 self.exit.clear()
                 break
-            if GetAsyncKeyState(VK_F2):
+            elif GetAsyncKeyState(VK_F2):
                 self.config.aimbot.enabled = not self.config.aimbot.enabled
-            if GetAsyncKeyState(VK_F3):
+            elif GetAsyncKeyState(VK_F3):
                 self.config.general.debug_mode = not self.config.general.debug_mode
                 print(
                     f"[DEBUG] Debug view {'ENABLED' if self.config.general.debug_mode else 'DISABLED'}")
                 cv.destroyAllWindows()
-                sleep(0.2)  # Debounce to prevent multiple toggles
+            elif GetAsyncKeyState(VK_F4):
+                self.alternate_move = not self.alternate_move
             sleep(0.01)
 
         cv.destroyAllWindows()  # Clean up windows on exit
