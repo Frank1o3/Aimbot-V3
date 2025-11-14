@@ -118,11 +118,11 @@ class Config(BaseModel):
 
         # dict → dict
         if isinstance(value, dict):
-            return {k: self.to_serializable(v) for k, v in value.items()}
+            return {k: self.to_serializable(v) for k, v in value.items()} # type: ignore
 
         # list → list
         if isinstance(value, list):
-            return [self.to_serializable(v) for v in value]
+            return [self.to_serializable(v) for v in value] # type: ignore
 
         # primitive
         return value

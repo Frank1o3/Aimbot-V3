@@ -188,10 +188,20 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------------------
     def pick_color(self):
         color = QColorDialog.getColor()
-        if color.isValid():
-            hex_str = f"0x{color.red():02x}{color.green():02x}{color.blue():02x}"
-            self.config.general.color = ColorHex(int(hex_str))
-            self.btn_color.setText(f"Color: {hex_str}")
+        if not color.isValid():
+            return
+
+        # Build the 0xRRGGBB integer and also a #rrggbb string for the button label
+        int_val = (color.red() << 16) | (color.green() << 8) | color.blue()
+        hex_label = f"#{color.red():02x}{color.green():02x}{color.blue():02x}"
+
+        # Create ColorHex from the integer root (RootModel[int]) and assign
+        # This keeps the model storing an integer (no stray string attribute)
+        self.config.general.color = ColorHex(int_val)
+
+        # Update UI label to human-friendly #rrggbb
+        self.btn_color.setText(f"Color: {hex_label}")
+
 
     # --------------------------------------------------------------
     #   LIVE UPDATE HANDLERS
