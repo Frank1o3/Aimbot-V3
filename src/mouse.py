@@ -3,10 +3,10 @@
 import math
 import random
 import time
-from typing import Tuple
+from typing import Tuple, Literal
 
 from win32api import GetCursorPos, mouse_event  # type: ignore
-from win32con import MOUSEEVENTF_MOVE
+from win32con import MOUSEEVENTF_MOVE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEUP
 
 
 def move_mouse_relative(dx: int, dy: int) -> None:
@@ -18,6 +18,19 @@ def get_mouse_position() -> Tuple[int, int]:
     """Get the current position of the mouse cursor."""
     return GetCursorPos()
 
+def click(button: Literal["left", "right", "middle"] = "left") -> None:
+        """Simulate a mouse click of the specified button."""
+        button_map = {
+            "left": (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+            "right": (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+            "middle": (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
+        }
+        if button not in button_map:
+            raise ValueError(f"Invalid button: {button!r}")
+
+        down_event, up_event = button_map[button]
+        mouse_event(down_event, 0, 0, 0, 0)
+        mouse_event(up_event, 0, 0, 0, 0)
 
 def move_mouse_to(target_x: int, target_y: int) -> None:
     """

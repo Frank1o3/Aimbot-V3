@@ -1,14 +1,16 @@
-""" Main entry point for the application. """
-
-import os
-
+from PySide6.QtWidgets import QApplication
 from config import Config
-from aimbot import Tracker
+from ui.main_window import MainWindow
+import sys
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(os.path.dirname(script_dir), "config.yml")
-config = Config.load(config_path)
+def main():
+    app = QApplication(sys.argv)
+
+    config = Config.load("config.yml")
+    window = MainWindow(config)
+    window.show()
+
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    bot = Tracker(config)
-    bot.run()
+    main()
