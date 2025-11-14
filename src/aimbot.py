@@ -2,8 +2,10 @@
 
 # Build in Modules
 import math
+import queue
 from threading import Event, Thread
 from time import sleep
+from typing import Dict, Any, Tuple
 
 # Third Party Modules
 import cv2 as cv
@@ -14,7 +16,7 @@ from win32con import VK_F1, VK_F2, VK_F3, VK_F4
 
 # Custom Made Modules
 from config import Config
-from mouse import get_mouse_position, move_mouse_relative, move_mouse_to
+from mouse import get_mouse_position, move_mouse_relative
 from utils import get_client_rect, get_window_hwnd
 
 
@@ -36,9 +38,11 @@ class Tracker:
         self.upper_bound = np.clip(
             self.color + config.aimbot.tolerance, 0, 255)
 
-        self.frame: cv.typing.MatLike = np.zeros((1, 1), dtype=np.uint8)
+        # --- FIX: Implement Queue (maxsize=1) for safe Frame Transfer ---
+        # Queue holds a tuple: (frame_mask, monitor_dict). Max size 1 ensures only the freshest frame is kept.
+        self.frame_queue: queue.Queue[Tuple[cv.typing.MatLike, Dict[str, Any]]] = queue.Queue(maxsize=1)
 
-        # pre set the client_rect
+        # Monitor/FOV variables (used by all threads)
         self.monitor = {"top": 0, "left": 0, "bottom": 0, "right": 0}
         self.PrevX = 0.0
         self.PrevY = 0.0
@@ -46,26 +50,30 @@ class Tracker:
         self.VelY = 0.0
         self.exit = Event()
         self.exit.set()
-        self.fov = max(self.config.general.fov, 320)
+        self.fov = self.config.general.fov
         self.fov_half = self.fov // 2
 
     # Implement the screenshot thread
     def capture_thread(self) -> None:
-        """Continuously captures screenshots of the target window."""
+        """
+        Continuously captures screenshots and puts the latest frame/monitor data 
+        into the queue, safely overwriting older data. (Producer)
+        """
         if self.hwnd is None:
             raise ValueError("Invalid window handle.")
 
-        sct = mss()  # Create mss instance per thread for thread safety
+        sct = mss()
         while self.exit.is_set():
             client_rect = get_client_rect(self.hwnd)
             if client_rect is None:
-                continue  # Skip if the window is minimized or not visible
+                continue
 
             x, y, width, height = client_rect
             center_x = x + width // 2
             center_y = y + height // 2
 
-            self.monitor = {
+            # Determine the Field of View (FOV) monitor area
+            current_monitor = {
                 "top": max(y, center_y - self.fov_half),
                 "left": max(x, center_x - self.fov_half),
                 "width": min(x + width, center_x + self.fov_half)
@@ -74,17 +82,36 @@ class Tracker:
                 - max(y, center_y - self.fov_half),
             }
 
-            screenshot = sct.grab(self.monitor)
+            screenshot = sct.grab(current_monitor)
 
             img = np.array(screenshot)
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
-            frame = np.ascontiguousarray(img)
-            self.frame = cv.inRange(
-                frame, self.lower_bound, self.upper_bound).astype(np.uint8)
+            frame_bgr = np.ascontiguousarray(img) # Needed for debug and future features
+            frame_mask = cv.inRange(
+                frame_bgr, self.lower_bound, self.upper_bound).astype(np.uint8)
 
+            # Update the monitor reference (kept for old structure compatibility, 
+            # but the one in the queue is what the detect thread will use)
+            self.monitor = current_monitor
+
+            # --- WRITE FRAME TO QUEUE (Overwriting old frames if lagging) ---
+            frame_data = (frame_mask, current_monitor)
+            try:
+                # 1. Aggressively discard old frame if one is present
+                self.frame_queue.get_nowait()
+            except queue.Empty:
+                pass # Queue was empty, safe to put
+
+            # 2. Put the new frame
+            try:
+                self.frame_queue.put_nowait(frame_data)
+            except queue.Full:
+                # Should not happen after get_nowait, but here for safety
+                pass
+                
     def contour_score(self, center_x: int, center_y: int, cnt: cv.typing.MatLike):
         area = cv.contourArea(cnt)
-        if not (self.config.aimbot.min_area < area < self.config.aimbot.max_area):
+        if not (self.config.aimbot.min_area <= area <= self.config.aimbot.max_area):
             return float("inf")
         M = cv.moments(cnt)
         if M["m00"] == 0:
@@ -95,22 +122,33 @@ class Tracker:
         return dist_sq / (area + 1)  # prioritize larger targets if desired
 
     def detect_thread(self) -> None:
-        """Continuously detects the target color in the captured frames."""
+        """
+        Processes frames from the queue and performs aiming/mouse movement. (Consumer)
+        """
         while self.exit.is_set():
+            try:
+                # 1. READ FRAME SAFELY (Consumer from CaptureThread)
+                # Blocks for a short time (e.g., 5ms) to reduce CPU spin
+                frame, current_monitor = self.frame_queue.get(timeout=0.005)
+            except queue.Empty:
+                sleep(0.001) # Wait briefly if queue is empty
+                continue
+
             mouse_X, mouse_Y = get_mouse_position()
-            frame = self.frame.copy()
+            
+            # Use the frame and monitor data retrieved from the queue
             if frame.size == 0:
                 continue
 
+            # 2. DETECTION AND CONTROL
             contours, _ = cv.findContours(
                 frame, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
-            if contours and self.monitor and self.config.aimbot.enabled:
+            if contours and current_monitor and self.config.aimbot.enabled:
                 frame_h, frame_w = frame.shape[:2]
                 center_x, center_y = frame_w // 2, frame_h // 2
 
                 # Select contour closest to the frame center
-                # fix: pass center coords to the key function via a lambda
                 closest_contour = min(
                     contours, key=lambda cnt: self.contour_score(
                         center_x, center_y, cnt)
@@ -123,9 +161,9 @@ class Tracker:
                 cX_frame = int(M["m10"] / M["m00"])
                 cY_frame = int(M["m01"] / M["m00"])
 
-                # Convert to screen coordinates
-                cX = cX_frame + self.monitor["left"]
-                cY = cY_frame + self.monitor["top"]
+                # Convert to screen coordinates using the monitor data from the queue
+                cX = cX_frame + current_monitor["left"]
+                cY = cY_frame + current_monitor["top"]
 
                 if self.config.general.debug_mode:
                     cv.drawContours(
@@ -134,12 +172,14 @@ class Tracker:
                               5, (0, 0, 255), -1)
                     cv.putText(frame, f"Target: ({cX_frame},{cY_frame})",
                                (cX_frame + 10, cY_frame - 10),
-                               cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                               cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255 , 255), 1)
                     cv.imshow("Target Tracking", frame)
                     cv.waitKey(1)
                 else:
-                    sleep(0.01)
+                    # Removed unnecessary sleep when not showing debug, as the queue.get timeout is the main throttle
+                    pass 
 
+                # 3. MOVEMENT/CONTROL LOGIC
                 dX = cX - self.PrevX
                 dY = cY - self.PrevY
                 self.VelX = (self.config.sensitivity.smoothness * self.VelX) + \
@@ -149,24 +189,19 @@ class Tracker:
 
                 PredX = cX + self.config.offset.x + self.VelX * self.config.aimbot.lead_factor
                 PredY = cY + self.config.offset.y + self.VelY * self.config.aimbot.lead_factor
-                if not self.alternate_move:
-                    dist = math.hypot(PredX - mouse_X, PredY - mouse_Y)
-                    sens = self.config.sensitivity.min_sensitivity + (dist / self.fov) * (
-                        self.config.sensitivity.max_sensitivity - self.config.sensitivity.min_sensitivity)
-                    sens = max(self.config.sensitivity.min_sensitivity,
-                            min(sens, self.config.sensitivity.max_sensitivity))
+                dist = math.hypot(PredX - mouse_X, PredY - mouse_Y)
+                sens = self.config.sensitivity.min_sensitivity + (dist / self.fov) * (
+                    self.config.sensitivity.max_sensitivity - self.config.sensitivity.min_sensitivity)
+                sens = max(self.config.sensitivity.min_sensitivity,
+                        min(sens, self.config.sensitivity.max_sensitivity))
 
-                    moveX = math.ceil((PredX - mouse_X) / sens)
-                    moveY = math.ceil((PredY - mouse_Y) / sens)
+                moveX = math.ceil((PredX - mouse_X) / sens)
+                moveY = math.ceil((PredY - mouse_Y) / sens)
 
-                    move_mouse_relative(moveX, moveY)
-                    self.PrevX = cX
-                    self.PrevY = cY
-                else:
-                    move_mouse_to(math.ceil(PredX), math.ceil(PredY))
-            else:
-                self.PrevX = 0
-                self.PrevY = 0
+                move_mouse_relative(moveX, moveY)
+                
+                self.PrevX = cX
+                self.PrevY = cY
 
     def run(self) -> None:
         print(f"[STARTUP] Aimbot enabled: {self.config.aimbot.enabled}")
@@ -176,8 +211,8 @@ class Tracker:
         print(
             f"[STARTUP] Press F1 to exit, F2 to enable the aimbot, F3 to toggle debug view, F4 To set Alternate move\n")
 
-        thread1 = Thread(target=self.capture_thread)
-        thread2 = Thread(target=self.detect_thread)
+        thread1 = Thread(target=self.capture_thread, name="CaptureThread")
+        thread2 = Thread(target=self.detect_thread, name="DetectionControlThread")
 
         thread1.start()
         thread2.start()
@@ -189,7 +224,7 @@ class Tracker:
                 break
             elif GetAsyncKeyState(VK_F2):
                 self.config.aimbot.enabled = not self.config.aimbot.enabled
-                print(f"[DEBUG] Aimbot: {'ENABLED' if self.alternate_move else 'DISABLED'}")
+                print(f"[DEBUG] Aimbot: {'ENABLED' if self.config.aimbot.enabled else 'DISABLED'}")
             elif GetAsyncKeyState(VK_F3):
                 self.config.general.debug_mode = not self.config.general.debug_mode
                 print(
@@ -198,7 +233,7 @@ class Tracker:
             elif GetAsyncKeyState(VK_F4):
                 self.alternate_move = not self.alternate_move
                 print(f"[DEBUG] Alternate move: {'ENABLED' if self.alternate_move else 'DISABLED'}")
-            sleep(0.01)
+            sleep(0.2)
 
         cv.destroyAllWindows()  # Clean up windows on exit
         thread1.join()
