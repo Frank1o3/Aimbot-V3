@@ -101,3 +101,48 @@ class Config(BaseModel):
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cls(**data)
+
+    def to_serializable(self, value: Any) -> Any:
+        """
+        Convert Pydantic models and ColorHex into YAML-safe primitives.
+        """
+
+        # ColorHex → hex string "#rrggbb"
+        if isinstance(value, ColorHex):
+            return str(value)
+
+        # Pydantic model → dict
+        if isinstance(value, BaseModel):
+            dumped = value.model_dump()
+            return {k: self.to_serializable(v) for k, v in dumped.items()}
+
+        # dict → dict
+        if isinstance(value, dict):
+            return {k: self.to_serializable(v) for k, v in value.items()}
+
+        # list → list
+        if isinstance(value, list):
+            return [self.to_serializable(v) for v in value]
+
+        # primitive
+        return value
+
+
+    def save(self, path: str) -> None:
+        """
+        Save the current configuration back to a YAML file.
+        Ensures ColorHex values are stored as standard 6-digit hex strings.
+        """
+
+        # Convert whole Config model to serializable dict
+        data = self.to_serializable(self)
+
+        # Write YAML
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                data,
+                f,
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False
+            )

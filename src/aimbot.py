@@ -53,6 +53,21 @@ class Tracker:
         self.fov = self.config.general.fov
         self.fov_half = self.fov // 2
 
+    def update(self) -> bool:
+        try:
+            self.color = np.array(self.config.general.color.rgb, dtype=np.uint8)
+            # Precompute the lower and upper bounds for color detection
+            self.lower_bound = np.clip(
+                self.color - self.config.aimbot.tolerance, 0, 255)
+            self.upper_bound = np.clip(
+                self.color + self.config.aimbot.tolerance, 0, 255)
+            
+            self.fov = self.config.general.fov
+            self.fov_half = self.fov // 2
+            return True
+        except Exception:
+            return False
+    
     # Implement the screenshot thread
     def capture_thread(self) -> None:
         """
